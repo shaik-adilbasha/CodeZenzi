@@ -15,7 +15,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -37,21 +37,27 @@ jobs:
         with:
           gradle-version: "8.9"
 
-      - name: Check Android project files
+      - name: Find Android project
+        id: android
+        shell: bash
         run: |
-          test -f codezenzi-android-github-actions/codezenzi-android-github-actions/android-wrapper/settings.gradle
-          test -f codezenzi-android-github-actions/codezenzi-android-github-actions/android-wrapper/app/build.gradle
-          test -f codezenzi-android-github-actions/codezenzi-android-github-actions/android-wrapper/app/src/main/AndroidManifest.xml
-          echo "Android project files found."
+          echo "Searching for settings.gradle..."
+          find . -type f -name settings.gradle -print
+          PROJECT_FILE="$(find . -type f -name settings.gradle | grep '/android-wrapper/settings.gradle$' | head -n 1)"
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: Could not find android-wrapper/settings.gradle"
+            exit 1
+          fi
+          PROJECT_DIR="${PROJECT_FILE%/settings.gradle}"
+          echo "project_dir=$PROJECT_DIR" >> "$GITHUB_OUTPUT"
+          echo "Android project found at: $PROJECT_DIR"
 
       - name: Build CodeZenzi APK
-        working-directory: codezenzi-android-github-actions/codezenzi-android-github-actions/android-wrapper
-        run: gradle --no-daemon assembleDebug --stacktrace --info
+        run: gradle --no-daemon -p "${{ steps.android.outputs.project_dir }}" assembleDebug --stacktrace
 
       - name: Upload APK
-        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: CodeZenzi-debug-apk
-          path: codezenzi-android-github-actions/codezenzi-android-github-actions/android-wrapper/app/build/outputs/apk/debug/app-debug.apk
+          path: ${{ steps.android.outputs.project_dir }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
